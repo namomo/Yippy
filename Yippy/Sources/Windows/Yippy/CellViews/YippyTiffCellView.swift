@@ -38,6 +38,7 @@ class YippyTiffCellView: YippyItemBaseCellView, YippyItem {
     }
     
     func setupCell(withYippyTableView yippyTableView: YippyTableView, forHistoryItem historyItem: HistoryItem, at i: Int) {
+        setItemTint(.image)
         setupShortcutTextView(at: i)
         setHighlight(isSelected: yippyTableView.isRowSelected(i))
         tiffView.image = historyItem.getImage()

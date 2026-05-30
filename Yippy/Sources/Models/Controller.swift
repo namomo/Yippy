@@ -178,7 +178,15 @@ class Controller {
     
     
     // MARK: - Methods
+    private func requireControlGranted(showPopup: Bool = true) -> Bool {
+        return Helper.isControlGranted(showPopup: showPopup)
+    }
+
     @objc func panelPositionSelected(_ sender: NSMenuItem) {
+        guard requireControlGranted() else {
+            return
+        }
+
         if let position = PanelPosition(rawValue: sender.tag) {
             state.panelPosition.accept(position)
         }
@@ -188,14 +196,26 @@ class Controller {
     }
 
     @objc func togglePopover() {
+        guard requireControlGranted() else {
+            return
+        }
+
         state.isHistoryPanelShown.accept(!state.isHistoryPanelShown.value)
     }
     
     @objc func deleteSelectedClicked() {
+        guard requireControlGranted() else {
+            return
+        }
+
         YippyHotKeys.ctrlDelete.simulateOnDown()
     }
     
     @objc func clearHistoryClicked() {
+        guard requireControlGranted() else {
+            return
+        }
+
         state.history.clear()
     }
     
@@ -222,6 +242,10 @@ class Controller {
     }
     
     @objc func showSettings() {
+        guard requireControlGranted() else {
+            return
+        }
+
         // If the window isn't visible, show it
         if !self.settingsWindowController.window!.isVisible {
             self.settingsWindowController.showWindow(nil)

@@ -18,9 +18,8 @@ class AboutViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        //First get the nsObject by defining as an optional anyObject
-        let version = (Bundle.main.infoDictionary!["CFBundleShortVersionString"] as! String?)!
-        let build = (Bundle.main.infoDictionary!["CFBundleVersion"] as! String?)!
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
         
         versionLabel.stringValue = "Version \(version) (\(build))"
         

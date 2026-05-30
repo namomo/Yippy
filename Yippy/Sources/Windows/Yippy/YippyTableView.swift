@@ -53,16 +53,25 @@ class YippyTableView: NSTableView {
     }
     
     func selectItem(_ i: Int) {
+        guard yippyItems.indices.contains(i) else {
+            return
+        }
         let items = IndexSet(arrayLiteral: i)
         selectRowIndexes(items, byExtendingSelection: false)
-        scrollRowToVisible(items.first!)
+        scrollRowToVisible(i)
     }
     
     func deselectItem(_ i: Int) {
+        guard yippyItems.indices.contains(i) else {
+            return
+        }
         deselectRow(i)
     }
     
     func reloadItem(_ i: Int) {
+        guard yippyItems.indices.contains(i) else {
+            return
+        }
         reloadData(forRowIndexes: IndexSet(arrayLiteral: i), columnIndexes: IndexSet(arrayLiteral: 0))
     }
     
@@ -79,6 +88,14 @@ class YippyTableView: NSTableView {
         yippyItems = data
         self.isRichText = isRichText
         reloadData()
+    }
+
+    func clearCellHeightCache() {
+        cellHeightsCache.clearCache()
+    }
+
+    func removeCellHeight(for item: HistoryItem) {
+        cellHeightsCache.removeCellHeight(forId: item.fsId)
     }
 }
 
@@ -127,6 +144,18 @@ extension YippyTableView: NSTableViewDataSource {
             return .move
         }
     }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        let row = self.row(at: point)
+        guard yippyItems.indices.contains(row) else {
+            return nil
+        }
+
+        selectItem(row)
+        yippyDelegate?.yippyTableView(self, selectedDidChange: row)
+        return yippyDelegate?.yippyTableView(self, menuForItemAt: row)
+    }
     
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
         if dropOperation == .above {
@@ -163,7 +192,10 @@ extension YippyTableView: NSTableViewDataSource {
         
         CATransaction.begin()
         CATransaction.setCompletionBlock({
-            self.reloadData(forRowIndexes: IndexSet(integersIn: 0..<10), columnIndexes: IndexSet(arrayLiteral: 0))
+            let rowsToReload = min(10, self.numberOfRows)
+            if rowsToReload > 0 {
+                self.reloadData(forRowIndexes: IndexSet(integersIn: 0..<rowsToReload), columnIndexes: IndexSet(arrayLiteral: 0))
+            }
             if let delegate = self.yippyDelegate {
                 delegate.yippyTableView(self, didMoveItem: originalIndex, to: newIndex)
             }
@@ -192,7 +224,10 @@ extension YippyTableView: NSTableViewDelegate {
             return height
         }
         
-        let height = historyItem.getTableViewItemType().getItemHeight(withYippyTableView: tableView as! YippyTableView, forHistoryItem: historyItem)
+        guard let yippyTableView = tableView as? YippyTableView else {
+            return 0
+        }
+        let height = historyItem.getTableViewItemType().getItemHeight(withYippyTableView: yippyTableView, forHistoryItem: historyItem)
         
         cellHeightsCache.storeCellHeight(height, forId: historyItem.fsId, withCellIdentifier: itemType.identifier.rawValue, cellWidth: cellWidth, isRichText: isRichText)
         

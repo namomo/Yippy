@@ -261,13 +261,18 @@ class HistoryFileManager {
                 try self.fileManager.removeItem(at: self.getUrl(forItemWithId: deleted.fsId))
             }
             catch {
-                let historyError = YippyError(code: 0, userInfo: [
-                    NSLocalizedDescriptionKey: "Failed to delete item due to error: \(error.localizedDescription)"
-                ])
-                historyError.log(with: self.errorLogger)
-                historyError.show(with: self.alerter)
-                self.callHander(handler, withVal: false)
-                return
+                if (error as NSError).domain == NSCocoaErrorDomain && (error as NSError).code == NSFileNoSuchFileError {
+                    YippyWarning(localizedDescription: "History item folder was already missing for id '\(deleted.fsId.uuidString)'. Updating history order anyway.").log(with: self.warningLogger)
+                }
+                else {
+                    let historyError = YippyError(code: 0, userInfo: [
+                        NSLocalizedDescriptionKey: "Failed to delete item due to error: \(error.localizedDescription)"
+                    ])
+                    historyError.log(with: self.errorLogger)
+                    historyError.show(with: self.alerter)
+                    self.callHander(handler, withVal: false)
+                    return
+                }
             }
             
             // Stop caching the item

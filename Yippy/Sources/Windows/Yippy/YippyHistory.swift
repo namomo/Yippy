@@ -23,15 +23,23 @@ class YippyHistory {
     }
     
     func paste(selected: Int) {
+        guard items.indices.contains(selected) else {
+            return
+        }
+
         // Internally action the pasteboard change
         // Our pasteboard monitor will detect the change
         // But our `History` will know that it has already been consumed
-        history.moveItem(at: selected, to: 0)
+        let item = items[selected]
+        if let historyIndex = history.items.firstIndex(where: { $0 === item }) {
+            history.moveItem(at: historyIndex, to: 0)
+        }
+
         let newChangeCount = pasteboard.clearContents()
         history.recordPasteboardChange(withCount: newChangeCount)
         
         // Write object
-        pasteboard.writeObjects([items[selected]])
+        pasteboard.writeObjects([item])
         
         DispatchQueue.global().async {
             DispatchQueue.main.async {
@@ -56,8 +64,17 @@ class YippyHistory {
     
     /// Returns the next item to select
     func delete(selected: Int) -> Int? {
-        history.deleteItem(at: selected)
-        if selected == 0 {
+        guard items.indices.contains(selected) else {
+            return nil
+        }
+
+        let item = items[selected]
+        guard let historyIndex = history.items.firstIndex(where: { $0 === item }) else {
+            return nil
+        }
+
+        history.deleteItem(at: historyIndex)
+        if historyIndex == 0 {
             // If we want to remove this, then we may have to change the `HistoryItem` writingOptions() to not `.promised`, because if something is pasted from history, then deleted, it can no longer satisfy the promise.
             pasteboard.clearContents()
         }
@@ -80,15 +97,26 @@ class YippyHistory {
     }
     
     func move(from: Int, to: Int) {
-        history.moveItem(at: from, to: to)
+        guard items.indices.contains(from), items.indices.contains(to) else {
+            return
+        }
+
+        let movedItem = items[from]
+        let targetItem = items[to]
+        guard let historyFrom = history.items.firstIndex(where: { $0 === movedItem }),
+            let historyTo = history.items.firstIndex(where: { $0 === targetItem })
+        else {
+            return
+        }
+
+        history.moveItem(at: historyFrom, to: historyTo)
         
-        if to == 0 {
+        if historyTo == 0 {
             let newChangeCount = pasteboard.clearContents()
             history.recordPasteboardChange(withCount: newChangeCount)
             
             // Write object
-            pasteboard.writeObjects([items[from]])
+            pasteboard.writeObjects([movedItem])
         }
     }
 }
-

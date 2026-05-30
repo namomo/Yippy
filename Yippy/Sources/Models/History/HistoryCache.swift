@@ -101,7 +101,7 @@ class HistoryCache {
                 return
             }
             // If we're not caching the item, just return the data
-            if !self.isItemRegistered(id) {
+            if !self.isItemRegisteredUnsafe(id) {
                 retData = data
                 return
             }
@@ -161,11 +161,20 @@ class HistoryCache {
     /// - Parameter id: The id of the item to register.
     /// - Returns: `true` if the item is registered, `false` otherwise.
     func isItemRegistered(_ id: UUID) -> Bool {
-        return cachedData.keys.contains(id)
+        var isRegistered = false
+        accessQueue.sync {
+            isRegistered = self.isItemRegisteredUnsafe(id)
+        }
+        return isRegistered
     }
     
     
     // MARK: - Private methods
+
+    private func isItemRegisteredUnsafe(_ id: UUID) -> Bool {
+        return cachedData.keys.contains(id)
+    }
+
     
     /// Records cached data has been used, updating the usage queue.
     ///
@@ -186,8 +195,8 @@ class HistoryCache {
     /// Removes the least recently used data in the cache.
     private func removeLRU() {
         let removed = usage.removeFirst()
-        if cachedData.keys.contains(removed.id) && cachedData[removed.id]!.keys.contains(removed.type) {
-            _currentCacheSize -= cachedData[removed.id]!.removeValue(forKey: removed.type)!.count
+        if let removedData = cachedData[removed.id]?.removeValue(forKey: removed.type) {
+            _currentCacheSize -= removedData.count
         }
         else {
             YippyError(localizedDescription: "Error: Didn't find data with type \(removed.type.rawValue) for item with id \(removed.id.uuidString) to remove from the cache.").log(with: errorLogger)

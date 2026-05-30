@@ -30,19 +30,40 @@ RSYNC_PROTECT_TMP_FILES=(--filter "P .*.??????")
 # Copies and strips a vendored framework
 install_framework()
 {
-  if [ -r "${BUILT_PRODUCTS_DIR}/$1" ]; then
-    local source="${BUILT_PRODUCTS_DIR}/$1"
-  elif [ -r "${BUILT_PRODUCTS_DIR}/$(basename "$1")" ]; then
-    local source="${BUILT_PRODUCTS_DIR}/$(basename "$1")"
-  elif [ -r "$1" ]; then
-    local source="$1"
+  local source=""
+  if [ -e "${BUILT_PRODUCTS_DIR}/$1" ] || [ -L "${BUILT_PRODUCTS_DIR}/$1" ]; then
+    source="${BUILT_PRODUCTS_DIR}/$1"
+  elif [ -e "${BUILT_PRODUCTS_DIR}/$(basename "$1")" ] || [ -L "${BUILT_PRODUCTS_DIR}/$(basename "$1")" ]; then
+    source="${BUILT_PRODUCTS_DIR}/$(basename "$1")"
+  elif [ -e "$1" ] || [ -L "$1" ]; then
+    source="$1"
   fi
 
   local destination="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"
 
+  if [ -z "${source}" ]; then
+    echo "error: Framework '$1' was not found."
+    return 1
+  fi
+
   if [ -L "${source}" ]; then
     echo "Symlinked..."
-    source="$(readlink "${source}")"
+    local linked_source
+    linked_source="$(readlink "${source}")"
+    if [[ "$linked_source" = /* ]]; then
+      source="$linked_source"
+    elif [[ "$source" == "${BUILT_PRODUCTS_DIR}/"* ]]; then
+      source="${BUILT_PRODUCTS_DIR}/${linked_source}"
+    else
+      source="$(dirname "${source}")/${linked_source}"
+    fi
+  fi
+
+  if [ ! -e "${source}" ]; then
+    local archive_source="${BUILT_PRODUCTS_DIR}/../../IntermediateBuildFilesPath/UninstalledProducts/${PLATFORM_NAME}/$(basename "$1")"
+    if [ -e "${archive_source}" ]; then
+      source="${archive_source}"
+    fi
   fi
 
   # Use filter instead of exclude so missing patterns don't throw errors.

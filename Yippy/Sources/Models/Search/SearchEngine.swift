@@ -24,10 +24,10 @@ struct SearchQuery: Hashable, Equatable {
 
 public class SearchResult {
     
-    var query: SearchQuery
-    var results: [Int] = []
-    var items: Int
-    var completed: Int = 0
+    let query: SearchQuery
+    private(set) var results: [Int] = []
+    let items: Int
+    private(set) var completed: Int = 0
     
     var isFinished: Bool {
         return completed == items
@@ -40,8 +40,12 @@ public class SearchResult {
     
     func addResult(_ i: Int) {
         results.append(i)
-        results.sort()
         completed += 1
+    }
+
+    func addResults(_ indexes: [Int]) {
+        results.append(contentsOf: indexes)
+        completed += indexes.count
     }
     
     func recordFailure() {
@@ -50,16 +54,19 @@ public class SearchResult {
 }
 
 public class SearchEngine {
+
+    typealias SearchData = (index: Int, text: String)
     
-    var results = [SearchQuery: SearchResult]()
+    private var results = [SearchQuery: SearchResult]()
     
-    var inProgress = [SearchQuery]()
+    private var inProgress = [SearchQuery]()
     
-    var sem = DispatchSemaphore(value: 1)
+    private let stateQueue = DispatchQueue(label: "SearchEngine.state", attributes: .concurrent)
+    private let searchQueue = DispatchQueue(label: "SearchEngine.search", qos: .userInitiated)
     
-    var data: [String]
+    private let data: [SearchData]
     
-    init(data: [String]) {
+    init(data: [SearchData]) {
         self.data = data
     }
     
@@ -70,51 +77,37 @@ public class SearchEngine {
             return completion(result)
         }
         
-        DispatchQueue.global().async {
-            self.sem.wait()
-            self.inProgress.append(searchQuery)
-            self.sem.signal()
-            
-            // Do something
-            let resSem = DispatchSemaphore(value: 1)
+        searchQueue.async {
+            self.stateQueue.async(flags: .barrier) {
+                self.inProgress.append(searchQuery)
+            }
+
             let searchResult = SearchResult(query: searchQuery, items: self.data.count)
-            for (i, d) in self.data.enumerated() {
-                DispatchQueue.global().async {
-                    if performSearch(needle: searchQuery.query, haystack: d) {
-                        resSem.wait()
-                        searchResult.addResult(i)
-                        resSem.signal()
-                    }
-                    else {
-                        resSem.wait()
-                        searchResult.recordFailure()
-                        resSem.signal()
-                    }
+            var scoredResults = [(index: Int, score: Int)]()
+            for d in self.data {
+                if let score = scoreSearch(needle: searchQuery.query, haystack: d.text) {
+                    scoredResults.append((index: d.index, score: score))
+                }
+                else {
+                    searchResult.recordFailure()
                 }
             }
-            
-            self.finishSearch(searchResult: searchResult, update: completion) {
-                self.sem.wait()
+            searchResult.addResults(scoredResults.sorted(by: { $0.score < $1.score }).map { $0.index })
+
+            self.stateQueue.async(flags: .barrier) {
                 self.inProgress.removeAll(where: {$0 == searchQuery})
                 self.results[searchQuery] = searchResult
-                self.sem.signal()
             }
+
+            completion(searchResult)
         }
     }
-    
-    private func finishSearch(searchResult: SearchResult, update: @escaping (SearchResult) -> (), completion: @escaping () -> ()) {
-        if searchResult.isFinished {
-            update(searchResult)
-            completion()
-            return
-        }
-        
-        DispatchQueue.global().asyncAfter(deadline: DispatchTime.now() + 0.1, execute: {
-            self.finishSearch(searchResult: searchResult, update: update, completion: completion)
-        })
-    }
-    
+
     private func findResult(forQuery query: SearchQuery) -> SearchResult? {
-        return results[query]
+        var result: SearchResult?
+        stateQueue.sync {
+            result = results[query]
+        }
+        return result
     }
 }

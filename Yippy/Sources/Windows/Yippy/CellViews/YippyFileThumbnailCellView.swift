@@ -56,6 +56,7 @@ class YippyFileThumbnailCellView: YippyItemBaseCellView, YippyItem {
     
     func setupCell(withYippyTableView yippyTableView: YippyTableView, forHistoryItem historyItem: HistoryItem, at i: Int) {
         guard let url = historyItem.getFileUrl() else { return }
+        setItemTint(.file)
         itemTextView.attributedText = formatFileUrl(url)
         setupShortcutTextView(at: i)
         setHighlight(isSelected: yippyTableView.isRowSelected(i))
@@ -84,7 +85,10 @@ class YippyFileThumbnailCellView: YippyItemBaseCellView, YippyItem {
         let textContainerWidth = cellWidth - contentViewInsets.xTotal - fileNamePadding.xTotal
         
         // Create the attributed string
-        let str = formatFileUrl(historyItem.getFileUrl()!)
+        guard let fileUrl = historyItem.getFileUrl() else {
+            return ceil(contentViewInsets.yTotal + fileNamePadding.yTotal + imageSize.height + imageTopPadding)
+        }
+        let str = formatFileUrl(fileUrl)
         
         // Calculate the height of the text
         let estHeight = str.calculateSize(withMaxWidth: textContainerWidth).height

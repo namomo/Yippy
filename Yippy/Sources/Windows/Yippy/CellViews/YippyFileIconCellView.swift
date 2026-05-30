@@ -52,9 +52,13 @@ class YippyFileIconCellView: YippyItemBaseCellView, YippyItem {
     }
     
     func setupCell(withYippyTableView yippyTableView: YippyTableView, forHistoryItem historyItem: HistoryItem, at i: Int) {
+        guard let fileUrl = historyItem.getFileUrl() else {
+            return
+        }
+        setItemTint(.file)
         iconView.image = historyItem.getFileIcon()
         setupShortcutTextView(at: i)
-        itemTextView.attributedText = formatFileUrl(historyItem.getFileUrl()!)
+        itemTextView.attributedText = formatFileUrl(fileUrl)
         itemTextView.constraint(withIdentifier: "height")?.constant = Self.getFileNameTextViewHeight(withCellWidth: floor(yippyTableView.cellWidth), forHistoryItem: historyItem)
         setHighlight(isSelected: yippyTableView.isRowSelected(i))
     }
@@ -80,7 +84,10 @@ class YippyFileIconCellView: YippyItemBaseCellView, YippyItem {
         let width = cellWidth - contentViewInsets.xTotal - iconSize.width - textContainerInset.xTotal - iconViewPadding.xTotal
         
         // Create an attributed string of the text
-        let attrStr = formatFileUrl(historyItem.getFileUrl()!)
+        guard let fileUrl = historyItem.getFileUrl() else {
+            return textContainerInset.yTotal
+        }
+        let attrStr = formatFileUrl(fileUrl)
         
         // Get the max height of the text container
         let maxTextContainerHeight = Constants.panel.maxCellHeight - contentViewInsets.yTotal - textContainerInset.yTotal

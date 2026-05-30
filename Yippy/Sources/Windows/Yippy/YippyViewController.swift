@@ -17,6 +17,13 @@ struct Results {
     let isSearchResult: Bool
 }
 
+enum YippyItemGroup: Int {
+    case clipboard
+    case pinned
+
+    static let titles = ["Clipboard", "Pinned"]
+}
+
 class YippyViewController: NSViewController {
     
     @IBOutlet var yippyHistoryView: YippyTableView!
@@ -29,12 +36,15 @@ class YippyViewController: NSViewController {
     var yippyHistory = YippyHistory(history: State.main.history, items: [])
     
     var searchEngine = SearchEngine(data: [])
+    var searchRevision = 0
+    var searchSourceItems = [HistoryItem]()
     
     let disposeBag = DisposeBag()
     
     var isPreviewShowing = false
     
-    var itemGroups = BehaviorRelay<[String]>(value: ["Clipboard", "Favourites", "Clipboard", "Favourites", "Clipboard", "Favourites"])
+    var itemGroups = BehaviorRelay<[String]>(value: YippyItemGroup.titles)
+    var selectedItemGroup = BehaviorRelay<Int>(value: YippyItemGroup.clipboard.rawValue)
     
     var isRichText = Settings.main.showsRichText
     
@@ -51,9 +61,9 @@ class YippyViewController: NSViewController {
         State.main.showsRichText.distinctUntilChanged().subscribe(onNext: onShowsRichText).disposed(by: disposeBag)
         
         itemGroupScrollView.bind(toData: itemGroups.asObservable()).disposed(by: disposeBag)
-        itemGroupScrollView.bind(toSelected: BehaviorRelay<Int>(value: 0).asObservable()).disposed(by: disposeBag)
-        // TODO: Remove this when implemented
-        itemGroupScrollView.constraint(withIdentifier: "height")?.constant = 0
+        itemGroupScrollView.bind(toSelected: selectedItemGroup.asObservable()).disposed(by: disposeBag)
+        itemGroupScrollView.yippyDelegate = self
+        itemGroupScrollView.constraint(withIdentifier: "height")?.constant = 28
         
         Observable.combineLatest(
             results,
@@ -142,25 +152,63 @@ class YippyViewController: NSViewController {
     }
     
     func onHistoryChange(_ history: [HistoryItem], change: History.Change) {
-        updateSearchEngine(items: history)
-        if !searchBar.stringValue.isEmpty {
-            runSearch()
-        }
-        else {
-            results.accept(Results(items: history, isSearchResult: false))
+        updateCellHeightCache(for: change)
+        refreshDisplayedItems()
+
+        if searchBar.stringValue.isEmpty {
             switch change {
-            case .insert(let i):
-                if i == 0 {
-                    incrementSelected()
-                }
-                break;
-            default: break;
+            case .insert(let i) where selectedGroup == .clipboard && i == 0:
+                incrementSelected()
+            default:
+                break
             }
         }
     }
     
     func updateSearchEngine(items: [HistoryItem]) {
-        self.searchEngine = SearchEngine(data: items.compactMap({$0.getPlainString()}))
+        searchRevision += 1
+        let searchData = items.enumerated().compactMap { index, item -> SearchEngine.SearchData? in
+            guard let text = item.getPlainString() else {
+                return nil
+            }
+            return (index: index, text: text)
+        }
+        searchSourceItems = items
+        self.searchEngine = SearchEngine(data: searchData)
+    }
+
+    var selectedGroup: YippyItemGroup {
+        return YippyItemGroup(rawValue: selectedItemGroup.value) ?? .clipboard
+    }
+
+    func displayedItems() -> [HistoryItem] {
+        switch selectedGroup {
+        case .clipboard:
+            return State.main.history.items
+        case .pinned:
+            return pinnedItems()
+        }
+    }
+
+    func pinnedItems() -> [HistoryItem] {
+        let itemsById = Dictionary(uniqueKeysWithValues: State.main.history.items.map { ($0.fsId, $0) })
+        return Settings.main.pinnedHistoryItemIds.compactMap { itemsById[$0] }
+    }
+
+    func refreshDisplayedItems() {
+        let items = displayedItems()
+        updateSearchEngine(items: items)
+
+        if searchBar.stringValue.isEmpty {
+            results.accept(Results(items: items, isSearchResult: false))
+        }
+        else {
+            runSearch()
+        }
+
+        if let selected = selected.value, !items.indices.contains(selected) {
+            resetSelected()
+        }
     }
     
     func onAllChange(_ results: Results, _ selected: (Int?, Int?)) {
@@ -176,11 +224,11 @@ class YippyViewController: NSViewController {
                 self.yippyHistoryView.reloadData(self.yippyHistory.items, isRichText: self.isRichText)
             }
         
-        if let previous = selected.0 {
+        if let previous = selected.0, self.yippyHistory.items.indices.contains(previous) {
             self.yippyHistoryView.deselectItem(previous)
             self.yippyHistoryView.reloadItem(previous)
         }
-        if let selected = selected.1 {
+        if let selected = selected.1, self.yippyHistory.items.indices.contains(selected) {
             let currentSelection = self.yippyHistoryView.selected
             if currentSelection == nil || currentSelection != selected {
                 self.yippyHistoryView.selectItem(selected)
@@ -195,7 +243,21 @@ class YippyViewController: NSViewController {
     
     func onShowsRichText(_ showsRichText: Bool) {
         isRichText = showsRichText
+        yippyHistoryView.clearCellHeightCache()
         yippyHistoryView.reloadData(yippyHistory.items, isRichText: isRichText)
+    }
+
+    func updateCellHeightCache(for change: History.Change) {
+        switch change {
+        case .delete(let deletedItem):
+            yippyHistoryView.removeCellHeight(for: deletedItem)
+        case .clear:
+            yippyHistoryView.clearCellHeightCache()
+        case .itemLimitDecreased(let deletedItems):
+            deletedItems.forEach { yippyHistoryView.removeCellHeight(for: $0) }
+        default:
+            break
+        }
     }
     
     func bindHotKeyToYippyWindow(_ hotKey: YippyHotKey, disposeBag: DisposeBag) {
@@ -223,6 +285,10 @@ class YippyViewController: NSViewController {
     
     func deleteSelected() {
         if let selected = self.yippyHistoryView.selected {
+            if selectedGroup == .pinned {
+                self.selected.accept(unpinSelected())
+                return
+            }
             self.selected.accept(yippyHistory.delete(selected: selected))
         }
     }
@@ -235,11 +301,14 @@ class YippyViewController: NSViewController {
     }
     
     func shortcutPressed(key: Int) {
+        guard yippyHistory.items.indices.contains(key) else {
+            return
+        }
         paste(selected: key)
     }
     
     func togglePreview() {
-        if let selected = yippyHistoryView.selected {
+        if let selected = yippyHistoryView.selected, yippyHistory.items.indices.contains(selected) {
             isPreviewShowing = !isPreviewShowing
             if isPreviewShowing {
                 State.main.previewHistoryItem.accept(yippyHistory.items[selected])
@@ -256,18 +325,26 @@ class YippyViewController: NSViewController {
     }
     
     func runSearch() {
-        searchEngine.search(query: searchBar.stringValue, completion: { result in
-            if (result.query.query.isEmpty) {
-                self.results.accept(Results(items: State.main.history.items, isSearchResult: false))
-                return
+        let query = searchBar.stringValue
+        let revision = searchRevision
+        searchEngine.search(query: query, completion: { result in
+            DispatchQueue.main.async {
+                guard self.searchRevision == revision && self.searchBar.stringValue == result.query.query else {
+                    return
+                }
+
+                if result.query.query.isEmpty {
+                    self.results.accept(Results(items: self.displayedItems(), isSearchResult: false))
+                    return
+                }
+
+                var filteredData = [HistoryItem]()
+                for i in result.results where self.searchSourceItems.indices.contains(i) {
+                    filteredData.append(self.searchSourceItems[i])
+                }
+
+                self.results.accept(Results(items: filteredData, isSearchResult: true))
             }
-            
-            var filteredData = [HistoryItem]()
-            for i in result.results {
-                filteredData.append(State.main.history.items[i])
-            }
-            
-            self.results.accept(Results(items: filteredData, isSearchResult: true))
         })
     }
     
@@ -296,8 +373,94 @@ class YippyViewController: NSViewController {
     }
     
     private func paste(selected: Int) {
+        guard yippyHistory.items.indices.contains(selected) else {
+            return
+        }
         self.close()
         yippyHistory.paste(selected: selected)
+    }
+
+    func isPinned(_ item: HistoryItem) -> Bool {
+        return Settings.main.pinnedHistoryItemIds.contains(item.fsId)
+    }
+
+    func pin(_ item: HistoryItem) {
+        guard !isPinned(item) else {
+            return
+        }
+
+        var settings: Settings = Settings.main
+        settings.pinnedHistoryItemIds.insert(item.fsId, at: 0)
+        Settings.main = settings
+        refreshDisplayedItems()
+    }
+
+    func unpin(_ item: HistoryItem) {
+        var settings: Settings = Settings.main
+        settings.pinnedHistoryItemIds.removeAll(where: { $0 == item.fsId })
+        Settings.main = settings
+        refreshDisplayedItems()
+    }
+
+    func unpinSelected() -> Int? {
+        guard let selected = yippyHistoryView.selected, yippyHistory.items.indices.contains(selected) else {
+            return nil
+        }
+
+        unpin(yippyHistory.items[selected])
+        if selected < yippyHistory.items.count - 1 {
+            return selected
+        }
+        if selected > 0 {
+            return selected - 1
+        }
+        return nil
+    }
+
+    func reorderPinned(from: Int, to: Int) {
+        guard selectedGroup == .pinned,
+            yippyHistory.items.indices.contains(from),
+            yippyHistory.items.indices.contains(to)
+        else {
+            return
+        }
+
+        let movedId = yippyHistory.items[from].fsId
+        let targetId = yippyHistory.items[to].fsId
+        var pinnedIds = Settings.main.pinnedHistoryItemIds
+        guard let fromIndex = pinnedIds.firstIndex(of: movedId),
+            let toIndex = pinnedIds.firstIndex(of: targetId)
+        else {
+            return
+        }
+
+        let removed = pinnedIds.remove(at: fromIndex)
+        pinnedIds.insert(removed, at: toIndex)
+        var settings: Settings = Settings.main
+        settings.pinnedHistoryItemIds = pinnedIds
+        Settings.main = settings
+        refreshDisplayedItems()
+    }
+
+    @objc func pinMenuItemClicked(_ sender: NSMenuItem) {
+        guard yippyHistory.items.indices.contains(sender.tag) else {
+            return
+        }
+        pin(yippyHistory.items[sender.tag])
+    }
+
+    @objc func unpinMenuItemClicked(_ sender: NSMenuItem) {
+        guard yippyHistory.items.indices.contains(sender.tag) else {
+            return
+        }
+        unpin(yippyHistory.items[sender.tag])
+    }
+
+    @objc func deleteMenuItemClicked(_ sender: NSMenuItem) {
+        guard yippyHistory.items.indices.contains(sender.tag) else {
+            return
+        }
+        selected.accept(yippyHistory.delete(selected: sender.tag))
     }
 }
 
@@ -313,7 +476,48 @@ extension YippyViewController: YippyTableViewDelegate {
     }
     
     func yippyTableView(_ yippyTableView: YippyTableView, didMoveItem from: Int, to: Int) {
+        if selectedGroup == .pinned {
+            reorderPinned(from: from, to: to)
+            selected.accept(to)
+            return
+        }
+
         yippyHistory.move(from: from, to: to)
         selected.accept(to)
+    }
+
+    func yippyTableView(_ yippyTableView: YippyTableView, menuForItemAt row: Int) -> NSMenu? {
+        guard yippyHistory.items.indices.contains(row) else {
+            return nil
+        }
+
+        let item = yippyHistory.items[row]
+        let menu = NSMenu()
+        if isPinned(item) {
+            menu.addItem(NSMenuItem(title: "Remove from Pinned", action: #selector(unpinMenuItemClicked(_:)), keyEquivalent: ""))
+        }
+        else {
+            menu.addItem(NSMenuItem(title: "Pin", action: #selector(pinMenuItemClicked(_:)), keyEquivalent: ""))
+        }
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Delete Item", action: #selector(deleteMenuItemClicked(_:)), keyEquivalent: ""))
+        menu.items.forEach {
+            $0.target = self
+            $0.tag = row
+        }
+        return menu
+    }
+}
+
+extension YippyViewController: HorizontalButtonsViewDelegate {
+    func horizontalButtonsView(_ horizontalButtonsView: HorizontalButtonsView, didClickButtonAt i: Int) {
+        guard YippyItemGroup(rawValue: i) != nil else {
+            return
+        }
+
+        selectedItemGroup.accept(i)
+        selected.accept(nil)
+        refreshDisplayedItems()
+        resetSelected()
     }
 }

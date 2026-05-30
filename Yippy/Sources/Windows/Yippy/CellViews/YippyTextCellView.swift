@@ -49,6 +49,7 @@ class YippyTextCellView: YippyItemBaseCellView, YippyItem {
     }
     
     func setupCell(withYippyTableView yippyTableView: YippyTableView, forHistoryItem historyItem: HistoryItem, at i: Int) {
+        setItemTint(.text)
         itemTextView.attributedText = HistoryItemText.getAttributedString(forItem: historyItem, usingItemRtf: yippyTableView.isRichText)
         
         setHighlight(isSelected: yippyTableView.isRowSelected(i))

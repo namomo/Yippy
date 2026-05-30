@@ -41,6 +41,31 @@ class YippyItemBaseCellView: NSTableCellView {
         .font: Constants.fonts.yippyPlainText,
         .foregroundColor: NSColor.white.withAlphaComponent(0.7)
     ]
+
+    enum ItemTint {
+        case text
+        case image
+        case file
+        case color
+
+        var color: NSColor {
+            switch self {
+            case .text:
+                return NSColor.systemGray.withAlphaComponent(0.12)
+            case .image:
+                return NSColor.systemYellow.withAlphaComponent(0.18)
+            case .file:
+                return NSColor.systemBlue.withAlphaComponent(0.12)
+            case .color:
+                return NSColor(named: NSColor.Name("TextBackgroundColor")) ?? NSColor.textBackgroundColor
+            }
+        }
+    }
+
+    func setItemTint(_ tint: ItemTint) {
+        contentView.usesDynamicBackgroundColor = false
+        contentView.layer?.backgroundColor = tint.color.cgColor
+    }
     
     func setHighlight(isSelected: Bool) {
         var highlightColor = NSColor.systemBlue.withAlphaComponent(0.7).cgColor
@@ -135,8 +160,6 @@ class YippyItemBaseCellView: NSTableCellView {
     }
     
     override func rightMouseDown(with event: NSEvent) {
-        let menu = NSMenu(title: "Test").with(menuItem: NSMenuItem(title: "Options coming soon", action: nil, keyEquivalent: ""))
-        
-        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        super.rightMouseDown(with: event)
     }
 }

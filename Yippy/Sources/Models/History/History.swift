@@ -103,13 +103,14 @@ class History {
         historyFM.insertItem(newHistory: _items, at: i)
         
         if _items.count > _maxItems.value {
-            let deletedItem = _items[_items.count - 1]
             deleteItem(at: _items.count - 1)
-            subscribers.forEach({$0(_items, Change.delete(deletedItem: deletedItem))})
         }
     }
     
     func deleteItem(at i: Int) {
+        guard _items.indices.contains(i) else {
+            return
+        }
         let removed = _items.remove(at: i)
         subscribers.forEach({$0(_items, Change.delete(deletedItem: removed))})
         historyFM.deleteItem(newHistory: _items, deleted: removed)
@@ -123,6 +124,9 @@ class History {
     }
     
     func moveItem(at i: Int, to j: Int) {
+        guard _items.indices.contains(i), _items.indices.contains(j) else {
+            return
+        }
         let item = _items.remove(at: i)
         _items.insert(item, at: j)
         subscribers.forEach({$0(_items, Change.move(from: i, to: j))})

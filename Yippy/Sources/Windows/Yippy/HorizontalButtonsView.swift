@@ -15,6 +15,7 @@ class HorizontalButtonsView: NSScrollView {
     
     private var buttons = [NSButton]()
     private var buttonsDocumentView = NSView(frame: .zero)
+    var yippyDelegate: HorizontalButtonsViewDelegate?
     
     var leftPadding: CGFloat = 20
     var rightPadding: CGFloat = 20
@@ -59,6 +60,8 @@ class HorizontalButtonsView: NSScrollView {
             button.setButtonType(.onOff)
             button.tag = $0
             button.state = .off
+            button.sizeToFit()
+            button.frame.size.width += 12
             return button
         })
     }
@@ -94,6 +97,7 @@ class HorizontalButtonsView: NSScrollView {
     
     @objc private func buttonHandler(_ sender: NSButton) {
         updateSelected(sender.tag)
+        yippyDelegate?.horizontalButtonsView(self, didClickButtonAt: sender.tag)
     }
     
     override func setFrameSize(_ newSize: NSSize) {
@@ -103,7 +107,7 @@ class HorizontalButtonsView: NSScrollView {
     }
 }
 
-protocol HorizontalButtonsViewDelegate {
+protocol HorizontalButtonsViewDelegate: AnyObject {
     
     func horizontalButtonsView(_ horizontalButtonsView: HorizontalButtonsView, didClickButtonAt i: Int)
     

@@ -64,6 +64,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func setupHotKey() {
         YippyHotKeys.toggle.changeHotKey(keyCombo: Settings.main.toggleHotKey)
         YippyHotKeys.toggle.onDown {
+            guard Helper.isControlGranted(showPopup: true) else {
+                return
+            }
+
             Controller.main.togglePopover()
         }
     }

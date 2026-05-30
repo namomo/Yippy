@@ -36,17 +36,21 @@ class PreviewImageViewController: NSViewController, PreviewViewController {
     
     func configureView(forItem item: HistoryItem) -> NSRect {
         // TODO: Fix with "Missing image" image
-        let image = item.getImage() ?? NSImage(size: NSSize(width: 0, height: 0))
+        let image = item.getImage() ?? NSImage(size: NSSize(width: 1, height: 1))
         imageView.image = image
         return calculateWindowFrame(forImage: image)
     }
     
     func calculateWindowFrame(forImage image: NSImage) -> NSRect {
-        let maxWindowWidth = NSScreen.main!.frame.width * 0.8
-        let maxWindowHeight = NSScreen.main!.frame.height * 0.8
+        let screenFrame = NSScreen.main?.frame ?? view.window?.screen?.frame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
+        let maxWindowWidth = screenFrame.width * 0.8
+        let maxWindowHeight = screenFrame.height * 0.8
         
         var windowWidth: CGFloat = 0
         var windowHeight: CGFloat = 0
+        guard image.size.width > 0 && image.size.height > 0 else {
+            return NSRect(origin: NSPoint(x: screenFrame.midX, y: screenFrame.midY), size: NSSize(width: 1, height: 1))
+        }
         
         if image.size.width > image.size.height {
             windowWidth = min(maxWindowWidth, image.size.width)
@@ -57,7 +61,7 @@ class PreviewImageViewController: NSViewController, PreviewViewController {
             windowWidth = windowHeight * image.size.width/image.size.height
         }
         
-        let center = NSPoint(x: NSScreen.main!.frame.midX - windowWidth / 2, y: NSScreen.main!.frame.midY - windowHeight / 2)
+        let center = NSPoint(x: screenFrame.midX - windowWidth / 2, y: screenFrame.midY - windowHeight / 2)
         
         return NSRect(origin: center, size: NSSize(width: windowWidth, height: windowHeight))
     }

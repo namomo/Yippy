@@ -22,7 +22,8 @@ struct Settings: Codable, DefaultStorable {
         toggleHotKey: KeyCombo,
         maxHistory: Int,
         showsRichText: Bool,
-        pastesRichText: Bool
+        pastesRichText: Bool,
+        pinnedHistoryItemIds: [UUID] = []
     ) {
         self.panelPosition = panelPosition
         self.pasteboardChangeCount = pasteboardChangeCount
@@ -30,6 +31,7 @@ struct Settings: Codable, DefaultStorable {
         self.maxHistory = maxHistory
         self.showsRichText = showsRichText
         self.pastesRichText = pastesRichText
+        self.pinnedHistoryItemIds = pinnedHistoryItemIds
     }
     
     static var main: Settings! {
@@ -69,6 +71,8 @@ struct Settings: Codable, DefaultStorable {
     var showsRichText: Bool
     
     var pastesRichText: Bool
+
+    var pinnedHistoryItemIds: [UUID]
     
     
     // MARK: - State Binding Methods
@@ -101,6 +105,42 @@ struct Settings: Codable, DefaultStorable {
         return state.bind { (x) in
             Settings.main.pastesRichText = x
         }
+    }
+}
+
+extension Settings {
+    enum CodingKeys: String, CodingKey {
+        case panelPosition
+        case pasteboardChangeCount
+        case toggleHotKey
+        case maxHistory
+        case showsRichText
+        case pastesRichText
+        case pinnedHistoryItemIds
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            panelPosition: try container.decode(PanelPosition.self, forKey: .panelPosition),
+            pasteboardChangeCount: try container.decode(Int.self, forKey: .pasteboardChangeCount),
+            toggleHotKey: try container.decode(KeyCombo.self, forKey: .toggleHotKey),
+            maxHistory: try container.decode(Int.self, forKey: .maxHistory),
+            showsRichText: try container.decode(Bool.self, forKey: .showsRichText),
+            pastesRichText: try container.decode(Bool.self, forKey: .pastesRichText),
+            pinnedHistoryItemIds: try container.decodeIfPresent([UUID].self, forKey: .pinnedHistoryItemIds) ?? []
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(panelPosition, forKey: .panelPosition)
+        try container.encode(pasteboardChangeCount, forKey: .pasteboardChangeCount)
+        try container.encode(toggleHotKey, forKey: .toggleHotKey)
+        try container.encode(maxHistory, forKey: .maxHistory)
+        try container.encode(showsRichText, forKey: .showsRichText)
+        try container.encode(pastesRichText, forKey: .pastesRichText)
+        try container.encode(pinnedHistoryItemIds, forKey: .pinnedHistoryItemIds)
     }
 }
 
