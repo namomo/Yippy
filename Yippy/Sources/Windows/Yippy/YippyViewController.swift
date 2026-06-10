@@ -32,6 +32,8 @@ class YippyViewController: NSViewController {
     @IBOutlet var itemCountLabel: NSTextField!
     
     @IBOutlet var searchBar: NSTextField!
+
+    private var clearClipboardButton: NSButton!
     
     var yippyHistory = YippyHistory(history: State.main.history, items: [])
     
@@ -74,6 +76,7 @@ class YippyViewController: NSViewController {
             .disposed(by: disposeBag)
         
         searchBar.delegate = self
+        setupClearClipboardButton()
         
         // TODO: Fix hack to make onAllChange run initially
         selected.accept(1)
@@ -181,6 +184,32 @@ class YippyViewController: NSViewController {
         return YippyItemGroup(rawValue: selectedItemGroup.value) ?? .clipboard
     }
 
+    private func setupClearClipboardButton() {
+        clearClipboardButton = NSButton(title: "Clear", target: self, action: #selector(clearClipboardClicked))
+        clearClipboardButton.bezelStyle = .rounded
+        clearClipboardButton.font = NSFont.systemFont(ofSize: 12)
+        clearClipboardButton.setAccessibilityIdentifier(Accessibility.identifiers.clearClipboardButton)
+        clearClipboardButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(clearClipboardButton)
+
+        view.constraints
+            .filter {
+                ($0.firstItem as AnyObject?) === searchBar && $0.firstAttribute == .trailing
+                || ($0.secondItem as AnyObject?) === searchBar && $0.secondAttribute == .trailing
+            }
+            .forEach { $0.isActive = false }
+
+        NSLayoutConstraint.activate([
+            clearClipboardButton.centerYAnchor.constraint(equalTo: searchBar.centerYAnchor),
+            clearClipboardButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            clearClipboardButton.widthAnchor.constraint(equalToConstant: 58),
+            clearClipboardButton.heightAnchor.constraint(equalToConstant: 28),
+            searchBar.trailingAnchor.constraint(equalTo: clearClipboardButton.leadingAnchor, constant: -8),
+        ])
+
+        updateClearClipboardButtonVisibility()
+    }
+
     func displayedItems() -> [HistoryItem] {
         switch selectedGroup {
         case .clipboard:
@@ -198,6 +227,7 @@ class YippyViewController: NSViewController {
     func refreshDisplayedItems() {
         let items = displayedItems()
         updateSearchEngine(items: items)
+        updateClearClipboardButtonVisibility()
 
         if searchBar.stringValue.isEmpty {
             results.accept(Results(items: items, isSearchResult: false))
@@ -282,6 +312,19 @@ class YippyViewController: NSViewController {
             paste(selected: selected)
         }
     }
+
+    @objc func clearClipboardClicked() {
+        guard selectedGroup == .clipboard else {
+            return
+        }
+
+        searchBar.stringValue = ""
+        State.main.previewHistoryItem.accept(nil)
+        isPreviewShowing = false
+        yippyHistory.clearClipboard()
+        refreshDisplayedItems()
+        resetSelected()
+    }
     
     func deleteSelected() {
         if let selected = self.yippyHistoryView.selected {
@@ -322,6 +365,10 @@ class YippyViewController: NSViewController {
     func focusSearchBar() {
         NSApp.activate(ignoringOtherApps: true)
         self.searchBar.becomeFirstResponder()
+    }
+
+    private func updateClearClipboardButtonVisibility() {
+        clearClipboardButton?.isHidden = selectedGroup != .clipboard
     }
     
     func runSearch() {

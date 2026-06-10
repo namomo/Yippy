@@ -95,6 +95,12 @@ class YippyHistory {
         }
         return select
     }
+
+    func clearClipboard() {
+        let newChangeCount = pasteboard.clearContents()
+        history.recordPasteboardChange(withCount: newChangeCount)
+        history.clear()
+    }
     
     func move(from: Int, to: Int) {
         guard items.indices.contains(from), items.indices.contains(to) else {
